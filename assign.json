@@ -1,7 +1,0 @@
-{
-  "name" : "assign",
-  "driver" : "False",
-  "valgrind" : [ "False", "0" ],
-  "number" : "5",
-  "timelimit" : "5"
-}

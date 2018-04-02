@@ -1,0 +1,8 @@
+{
+  "name" : "test_assign",
+  "driver" : "False",
+  "valgrind" : [ "False", "0" ],
+  "number" : "2",
+  "timelimit" : "5",
+  "due_data" : "2018-03-30T20:00:00.000"
+}
