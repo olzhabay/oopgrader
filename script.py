@@ -102,7 +102,8 @@ for meta in data:
 
     # clone
     print "cloning " + student_git_url + " to " + student_project_dir
-    os.system("git clone %s %s/." % (student_git_url, student_project_dir))
+    os.system("rm -rf %s" % student_project_dir)
+    os.system("git clone %s %s/" % (student_git_url, student_project_dir))
 
 
     # copy testcases and makefile
