@@ -101,7 +101,9 @@ for meta in data:
     student_comment = ''
 
     # clone
+    print "cloning " + student_git_url + " to " + student_project_dir
     os.system("git clone %s %s/." % (student_git_url, student_project_dir))
+
 
     # copy testcases and makefile
     os.system("cp %s/* %s/." % (testcases_dir, student_project_dir))
@@ -116,9 +118,9 @@ for meta in data:
         # start testing
         for i in range(0, test_number):
             if driver:
-                (stat, output) = run(["%s/driver%d" % (student_project_dir, i)], timelimit)
+                (stat, output) = run(["%s/driver%d" % (student_project_dir, i)], timelimit*60)
             else:
-                (stat, output) = run(["%s/%s" % (student_project_dir, project_name), "<", "input%d.txt" % i], timelimit)
+                (stat, output) = run(["%s/%s" % (student_project_dir, project_name), "<", "input%d.txt" % i], timelimit*60)
             if stat == 0:
                 diff = compare_output(output, open("%s/output%d.txt" % (student_project_dir, i), 'r'))
                 if diff == 0:
@@ -131,7 +133,7 @@ for meta in data:
 
         # test memory leak
         if valgrind:
-            (stat, output) = run(["valgrind", "-v", "%s/driver%d" % (student_project_dir, valgrind_test)], timelimit)
+            (stat, output) = run(["valgrind", "-v", "%s/driver%d" % (student_project_dir, valgrind_test)], timelimit*60)
             if 'no leak' in output:
                 student_testcase_grade += test_grade
                 student_comment += "| no leak "
