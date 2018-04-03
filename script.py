@@ -9,10 +9,10 @@ import datetime
 from threading import Timer
 
 
-def clean_ending(file):
-    while file[-1] == '\n' or file[-1] == '' or file[-1] == ' ':
-        file.pop(-1)
-    return file
+def clean_ending(lines):
+    while len(lines) > 0 and (lines[-1] == '\n' or lines[-1] == '' or lines[-1] == ' '):
+        lines.pop(-1)
+    return lines
 
 
 # return number of different lines from answer
@@ -36,8 +36,9 @@ def run(cmd, in_filename=None, out_filename=None, timeout_sec=0):
     timer = Timer(timeout_sec, kill_proc, [proc])
     try:
         timer.start()
-        return_code = proc.wait()
-        return return_code
+        proc.wait()
+        var = proc.communicate()[0]
+        return proc.returncode
     finally:
         timer.cancel()
 
@@ -97,6 +98,7 @@ for meta in data:
     # setup grading vars
     student_total_grade = 0.0
     student_testcase_grade = 0.0
+    due_date_penalty = 0
     student_comment = ''
 
     # clone
@@ -146,22 +148,21 @@ for meta in data:
             else:
                 student_comment += "| valgrind run error "
 
-    # checking if code is not empty, giving 5 points
-    code_lines = sum(1 for line in open('%s/%s.cpp' %(student_project_dir, project_name)))
-    if code_lines > 15:
-        student_total_grade += 5
-    # due date calc
-    due_date_penalty = 0
-    due_date_dt = datetime.datetime.strptime(due_date, '%Y-%m-%dT%H:%M:%S.%f')
-    student_date_dt = datetime.datetime.strptime(last_activity, '%Y-%m-%dT%H:%M:%S.%fZ')
-    delta = student_date_dt - due_date_dt
-    if delta.days > 0 or delta.seconds > 0:
-        if delta.days >= 3:
-            due_date_penalty = 10
-            student_comment += "| due date limit "
-        else:
-            due_date_penalty = 1 + delta.days
-            student_comment += "| %d days due" % due_date_penalty
+        # checking if code is not empty, giving 5 points
+        code_lines = sum(1 for line in open('%s/%s.cpp' %(student_project_dir, project_name)))
+        if code_lines > 15:
+            student_total_grade += 5
+        # due date calc
+        due_date_dt = datetime.datetime.strptime(due_date, '%Y-%m-%dT%H:%M:%S.%f')
+        student_date_dt = datetime.datetime.strptime(last_activity, '%Y-%m-%dT%H:%M:%S.%fZ')
+        delta = student_date_dt - due_date_dt
+        if delta.days > 0 and delta.seconds > 0:
+            if delta.days >= 3:
+                due_date_penalty = 10
+                student_comment += "| due date limit "
+            else:
+                due_date_penalty = 1 + delta.days
+                student_comment += "| %d days due" % due_date_penalty
 
     # calc total grade
     student_total_grade += student_testcase_grade * 0.9
@@ -172,4 +173,4 @@ for meta in data:
 
 with open('%s/%s_grade.csv' % (graded_dir, project_name), 'wb') as out_file:
     wr = csv.writer(out_file, quoting=csv.QUOTE_ALL)
-    wr.writerow(students_results)
+    wr.writerows(student for student in students_results)
