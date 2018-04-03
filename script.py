@@ -18,8 +18,8 @@ def clean_ending(file):
 # return number of different lines from answer
 def compare_output(output, answer):
     diff = 0
-    out_lines = clean_ending(output.splitlines())
-    ans_lines = clean_ending(answer.splitlines())
+    out_lines = clean_ending(output.read().splitlines())
+    ans_lines = clean_ending(answer.read().splitlines())
     for i in range(0, len(ans_lines)):
         if ans_lines[i] != out_lines[i]:
             diff = diff + 1
@@ -28,17 +28,16 @@ def compare_output(output, answer):
     return diff
 
 
-def run(cmd, timeout_sec):
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+def run(cmd, in_filename=None, out_filename=None, timeout_sec=0):
+    in_file = open(in_filename, 'r') if in_filename is not None else None
+    out_file = open(out_filename, 'w') if out_filename is not None else None
+    proc = subprocess.Popen(cmd, stdin=in_file, stdout=out_file)
     kill_proc = lambda p: p.kill()
     timer = Timer(timeout_sec, kill_proc, [proc])
     try:
         timer.start()
-        stdout, stderr = proc.communicate()
-        if stderr == "":
-            return 0, stdout
-        else:
-            return 1, stdout
+        return_code = proc.wait()
+        return return_code
     finally:
         timer.cancel()
 
@@ -78,7 +77,7 @@ driver = configuration["driver"] == 'True'
 test_number = int(configuration["test_number"])
 valgrind = configuration["valgrind"][0] == 'True'
 valgrind_test = int(configuration["valgrind"][1])
-timelimit = configuration["timelimit"]
+timelimit = int(configuration["timelimit"])
 due_date = configuration["due_date"]
 test_grade = (100 / test_number if not valgrind else 100 / (test_number + 1))
 
@@ -101,7 +100,6 @@ for meta in data:
     student_comment = ''
 
     # clone
-    print "cloning " + student_git_url + " to " + student_project_dir
     os.system("rm -rf %s" % student_project_dir)
     os.system("git clone %s %s/" % (student_git_url, student_project_dir))
 
@@ -110,20 +108,24 @@ for meta in data:
     os.system("cp %s/* %s/." % (testcases_dir, student_project_dir))
 
     # run makefile
-    (stat, output) = run(["make", "-C" "%s/" % student_project_dir], 60)
+    stat = run(["make", "-C" "%s/" % student_project_dir], timeout_sec=60)
     if stat != 0:
         student_comment += "| does not compile "
     else:
         # adding 5 points for compilable code
         student_total_grade += 5
         # start testing
-        for i in range(0, test_number):
-            if driver:
-                (stat, output) = run(["%s/driver%d" % (student_project_dir, i)], timelimit*60)
-            else:
-                (stat, output) = run(["%s/%s" % (student_project_dir, project_name), "<", "input%d.txt" % i], timelimit*60)
+        for i in range(1, test_number+1):
+            # setup files
+            test_output = "%s/output%d.txt" % (student_project_dir, i)
+            test_input = "%s/input%d.txt" % (student_project_dir, i)
+            user_output = "%s/user%d.txt" % (student_project_dir, i)
+            run_command = (["%s/driver%d" % (student_project_dir, i)] if driver else ["%s/%s" % (student_project_dir, project_name)])
+            # run
+            stat = run(run_command, in_filename=test_input, out_filename=user_output, timeout_sec=timelimit*60)
+            # check
             if stat == 0:
-                diff = compare_output(output, open("%s/output%d.txt" % (student_project_dir, i), 'r'))
+                diff = compare_output(open(user_output, 'r'), open(test_output, 'r'))
                 if diff == 0:
                     student_testcase_grade += test_grade
                     student_comment += "| test%d-success " % i
@@ -134,12 +136,15 @@ for meta in data:
 
         # test memory leak
         if valgrind:
-            (stat, output) = run(["valgrind", "-v", "%s/driver%d" % (student_project_dir, valgrind_test)], timelimit*60)
-            if 'no leak' in output:
-                student_testcase_grade += test_grade
-                student_comment += "| no leak "
+            stat = run(["valgrind", "-v", "%s/driver%d" % (student_project_dir, valgrind_test)], out_file="valgrind.txt", timeout_sec=timelimit*60)
+            if stat == 0:
+                if 'no leak' in open('valgrind.txt'):
+                    student_testcase_grade += test_grade
+                    student_comment += "| no leak "
+                else:
+                    student_comment += "| memory leak "
             else:
-                student_comment += "| memory leak "
+                student_comment += "| valgrind run error "
 
     # checking if code is not empty, giving 5 points
     code_lines = sum(1 for line in open('%s/%s.cpp' %(student_project_dir, project_name)))
@@ -147,8 +152,8 @@ for meta in data:
         student_total_grade += 5
     # due date calc
     due_date_penalty = 0
-    due_date_dt = datetime.strptime(due_date, '%Y-%m-%dT%H:%M:%S.%f')
-    student_date_dt = datetime.struct_time(last_activity, '%Y-%m-%dT%H:%M:%S.%fZ')
+    due_date_dt = datetime.datetime.strptime(due_date, '%Y-%m-%dT%H:%M:%S.%f')
+    student_date_dt = datetime.datetime.strptime(last_activity, '%Y-%m-%dT%H:%M:%S.%fZ')
     delta = student_date_dt - due_date_dt
     if delta.days > 0 or delta.seconds > 0:
         if delta.days >= 3:
@@ -160,11 +165,11 @@ for meta in data:
 
     # calc total grade
     student_total_grade += student_testcase_grade * 0.9
-    student_total_grade = (1 - due_date * 0.1) * student_total_grade
+    student_total_grade = (1 - due_date_penalty * 0.1) * student_total_grade
 
     # add student's result to the list
     students_results.append([student_id, round(student_total_grade, 1), student_comment])
 
-with open('%s/%s_grade.txt' % (graded_dir, project_name), 'wb') as out_file:
+with open('%s/%s_grade.csv' % (graded_dir, project_name), 'wb') as out_file:
     wr = csv.writer(out_file, quoting=csv.QUOTE_ALL)
     wr.writerow(students_results)
