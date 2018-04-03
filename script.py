@@ -20,12 +20,12 @@ def compare_output(output, answer):
     diff = 0
     out_lines = clean_ending(output.read().splitlines())
     ans_lines = clean_ending(answer.read().splitlines())
-    for i in range(0, len(ans_lines)):
+    for i in range(0, min(len(ans_lines), len(out_lines))):
         if ans_lines[i] != out_lines[i]:
             diff = diff + 1
     if len(ans_lines) < len(out_lines):
         diff = diff + (len(out_lines) - len(ans_lines))
-    return diff
+    return diff + max(len(ans_lines), len(out_lines)) - min(len(ans_lines), len(out_lines))
 
 
 def run(cmd, in_filename=None, out_filename=None, timeout_sec=0):
@@ -132,7 +132,7 @@ for meta in data:
                 else:
                     student_comment += "| test%d-diff(%d) " % (i, diff)
             else:
-                student_comment += "| test%d-error(%s) " % (i, output)
+                student_comment += "| test%d-crash " % i
 
         # test memory leak
         if valgrind:
