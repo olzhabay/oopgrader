@@ -4,5 +4,5 @@
   "valgrind" : [ "False", "0" ],
   "test_number" : "2",
   "timelimit" : "5",
-  "due_date" : "2018-03-30T20:00:00.000"
+  "due_date" : "2018-03-30T20:00:00"
 }

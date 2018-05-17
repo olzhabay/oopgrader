@@ -20,7 +20,7 @@ Get project id, which is in the settings of the project
   "valgrind" : [ "False", "0" ],          # True if to use Valgrind, and driver number to run Valgrind
   "number" : "5",                         # Number of testcases or drivers
   "timelimit" : "5"                       # Time limit to run each testcase in sec
-  "due_data" : "2018-03-30T20:00:00.000"  # Due date %Y-%m-%dT%H:%M:%S.%f
+  "due_data" : "2018-03-30T20:00:00"      # Due date %Y-%m-%dT%H:%M:%S
 }
 ```
 * Run script with assignment name as argument, as `python script.py assign1`
