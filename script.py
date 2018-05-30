@@ -205,14 +205,13 @@ def main(args):
 
                 # calculate due date
                 p = subprocess.Popen(['git', '--git-dir=%s/.git' % student_project_dir,
-                                      'log', '-1', '--format=%cd', '--date=format:%Y-%m-%dT%H:%M:%S'],
+                                      'log', '-1', '--format=%cd', '--date=iso'],
                                      stdout=subprocess.PIPE,
                                      stderr=subprocess.PIPE)
                 out, err = p.communicate()
-                out = out.replace(" ", "")
                 out = out.replace("\n", "")
                 due_date_dt = datetime.datetime.strptime(due_date, "%Y-%m-%dT%H:%M:%S")
-                student_date_dt = datetime.datetime.strptime(out, '%Y-%m-%dT%H:%M:%S')
+                student_date_dt = datetime.datetime.strptime(out[:19], '%Y-%m-%d %H:%M:%S')
                 delta = student_date_dt - due_date_dt
                 if delta.days >= 0:
                     if delta.seconds > 60:
