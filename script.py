@@ -1,14 +1,11 @@
+import datetime
+import json
 import os
 import subprocess
-import json
-import urllib2
-import csv
-import requests
-import re
-import datetime
-import pandas
-from threading import Timer
 from argparse import ArgumentParser
+from threading import Timer
+
+import pandas
 
 GRADING_TAG = '__graded_commit'
 GRADING_BRANCH = '__grading_branch'
@@ -26,7 +23,10 @@ def compare_output(output, answer):
     out_lines = clean_ending(output.read().splitlines())
     ans_lines = clean_ending(answer.read().splitlines())
     for i in range(0, min(len(ans_lines), len(out_lines))):
-        if ans_lines[i] != out_lines[i]:
+        # cleaning line from extra space in the end and compare
+        ans_line = ans_lines[i].rstrip()
+        out_line = out_lines[i].rstrip()
+        if ans_line != out_line:
             diff = diff + 1
     if len(ans_lines) < len(out_lines):
         diff = diff + (len(out_lines) - len(ans_lines))
@@ -64,6 +64,7 @@ def main(args):
     if args.token_file:
         with open(args.token_file) as file:
             token = file.read().strip()
+    individual = args.student.strip()
 
     # set directory vars
     current_dir = os.getcwd()
@@ -104,6 +105,9 @@ def main(args):
     results = []
 
     for index, student in students_list.iterrows():
+        # if individual grading, skip others
+        if len(individual) == 0 or str(student['id']).strip() != individual:
+            continue
         result = {'id': student['id']}
         grade = 0
         student_project_dir = "%s/%d" % (graded_dir, student['id'])
@@ -125,114 +129,126 @@ def main(args):
             print "  == stderr:", err
             student['submission'] = "clone error"
         else:
-            # successful submission
-            result['submission'] = "success"
-            grade += 5
-
-            # copy testcases and makefile
-            os.system("cp %s/* %s/." % (testcases_dir, student_project_dir))
-            # run makefile
-            stat = execute_command(["make", "-C" "%s/" % student_project_dir], timeout_sec=30)
-            if stat != 0:
-                result['compilation'] = "do not compile"
+            p = subprocess.Popen(['git', '--git-dir=%s/.git' % student_project_dir,
+                                  'log', '-1', '--pretty=format:"%an"'],
+                                 stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE)
+            out, err = p.communicate()
+            out = out.replace("\n", "")
+            if out == "unistoopta":
+                result['submission'] = "no submission"
             else:
-                # successful compilation
-                result['compilation'] = "success"
+                # successful submission
+                result['submission'] = "success"
                 grade += 5
 
-                # start testing
-                for i in range(1, test_number + 1):
-
-                    # setup files
-                    test_output = "%s/output%d.txt" % (student_project_dir, i)
-                    test_input = "%s/input%d.txt" % (student_project_dir, i)
-                    user_output = "%s/user%d.txt" % (student_project_dir, i)
-                    run_command = (["%s/driver%d" % (student_project_dir, i)] if driver else [
-                        "%s/%s" % (student_project_dir, project_name)])
-
-                    # run test case
-                    stat = execute_command(run_command,
-                                           in_filename=test_input,
-                                           out_filename=user_output,
-                                           timeout_sec=timelimit * 60)
-                    # check
-                    if stat == 0:
-                        diff = compare_output(open(user_output, 'r'), open(test_output, 'r'))
-                        if diff == 0:
-                            result['test%s' % i] = "success"
-                            grade += test_pts
-                        else:
-                            result['test%s' % i] = "difference in %s lines" % diff
-                    else:
-                        result['test%s' % i] = "crash"
-
-                # test memory leak
-                if valgrind:
-                    stat = execute_command(["valgrind", "-v", "%s/driver%d" % (student_project_dir, valgrind_test)],
-                                           out_filename="valgrind.txt", timeout_sec=timelimit*60)
-                    if stat == 0:
-                        if 'no leak' in open('valgrind.txt'):
-                            result['valgrind'] = "success"
-                            grade += test_pts
-                        else:
-                            result['valgrind'] = "leak"
-                    else:
-                        result['valgrind'] = "crash"
-
-                # extra point test
-                if extra_test != 0:
-                    # setup files
-                    test_output = "%s/output%d.txt" % (student_project_dir, extra_test)
-                    test_input = "%s/input%d.txt" % (student_project_dir, extra_test)
-                    user_output = "%s/user%d.txt" % (student_project_dir, extra_test)
-                    run_command = (["%s/driver%d" % (student_project_dir, extra_test)] if driver else [
-                        "%s/%s" % (student_project_dir, project_name)])
-                    # run test case
-                    stat = execute_command(run_command,
-                                           in_filename=test_input,
-                                           out_filename=user_output,
-                                           timeout_sec=timelimit * 60)
-                    # check
-                    if stat == 0:
-                        diff = compare_output(open(user_output, 'r'), open(test_output, 'r'))
-                        if diff == 0:
-                            result['test_extra'] = "success"
-                            grade += extra_test_pts
-                        else:
-                            result['test_extra'] = "difference in %s lines" % diff
-                    else:
-                        result['test_extra'] = "crash"
-
-                # calculate due date
-                p = subprocess.Popen(['git', '--git-dir=%s/.git' % student_project_dir,
-                                      'log', '-1', '--format=%cd', '--date=iso'],
-                                     stdout=subprocess.PIPE,
-                                     stderr=subprocess.PIPE)
-                out, err = p.communicate()
-                out = out.replace("\n", "")
-                due_date_dt = datetime.datetime.strptime(due_date, "%Y-%m-%dT%H:%M:%S")
-                student_date_dt = datetime.datetime.strptime(out[:19], '%Y-%m-%d %H:%M:%S')
-                delta = student_date_dt - due_date_dt
-                if delta.days >= 0:
-                    if delta.seconds > 60:
-                        result['due_date'] = delta.days + 1
-                    else:
-                        result['due_date'] = delta.days
+                # copy testcases and makefile
+                os.system("cp %s/* %s/." % (testcases_dir, student_project_dir))
+                # run makefile
+                stat = execute_command(["make", "-C" "%s/" % student_project_dir], timeout_sec=30)
+                if stat != 0:
+                    result['compilation'] = "do not compile"
                 else:
-                    result['due_date'] = 0
+                    # successful compilation
+                    result['compilation'] = "success"
+                    grade += 5
 
-                # calculate final grade
-                if result['due_date'] >= 3:
-                    grade = 10
-                else:
-                    grade = 10 + (grade - 10) * (1 - 0.1 * result['due_date'])
+                    # start testing
+                    for i in range(1, test_number + 1):
+
+                        # setup files
+                        test_output = "%s/output%d.txt" % (student_project_dir, i)
+                        test_input = "%s/input%d.txt" % (student_project_dir, i)
+                        user_output = "%s/user%d.txt" % (student_project_dir, i)
+                        run_command = (["%s/driver%d" % (student_project_dir, i)] if driver else [
+                            "%s/%s" % (student_project_dir, project_name)])
+
+                        # run test case
+                        stat = execute_command(run_command,
+                                               in_filename=test_input,
+                                               out_filename=user_output,
+                                               timeout_sec=timelimit * 60)
+                        # check
+                        if stat == 0:
+                            diff = compare_output(open(user_output, 'r'), open(test_output, 'r'))
+                            if diff == 0:
+                                result['test%s' % i] = "success"
+                                grade += test_pts
+                            else:
+                                result['test%s' % i] = "difference in %s lines" % diff
+                        else:
+                            result['test%s' % i] = "crash"
+
+                    # test memory leak
+                    if valgrind:
+                        stat = execute_command(["valgrind", "-v", "%s/driver%d" % (student_project_dir, valgrind_test)],
+                                               out_filename="valgrind.txt", timeout_sec=timelimit*60)
+                        if stat == 0:
+                            if 'no leak' in open('valgrind.txt'):
+                                result['valgrind'] = "success"
+                                grade += test_pts
+                            else:
+                                result['valgrind'] = "leak"
+                        else:
+                            result['valgrind'] = "crash"
+
+                    # extra point test
+                    if extra_test != 0:
+                        # setup files
+                        test_output = "%s/output%d.txt" % (student_project_dir, extra_test)
+                        test_input = "%s/input%d.txt" % (student_project_dir, extra_test)
+                        user_output = "%s/user%d.txt" % (student_project_dir, extra_test)
+                        run_command = (["%s/driver%d" % (student_project_dir, extra_test)] if driver else [
+                            "%s/%s" % (student_project_dir, project_name)])
+                        # run test case
+                        stat = execute_command(run_command,
+                                               in_filename=test_input,
+                                               out_filename=user_output,
+                                               timeout_sec=timelimit * 60)
+                        # check
+                        if stat == 0:
+                            diff = compare_output(open(user_output, 'r'), open(test_output, 'r'))
+                            if diff == 0:
+                                result['test_extra'] = "success"
+                                grade += extra_test_pts
+                            else:
+                                result['test_extra'] = "difference in %s lines" % diff
+                        else:
+                            result['test_extra'] = "crash"
+
+                    # calculate due date
+                    p = subprocess.Popen(['git', '--git-dir=%s/.git' % student_project_dir,
+                                          'log', '-1', '--format=%cd', '--date=iso'],
+                                         stdout=subprocess.PIPE,
+                                         stderr=subprocess.PIPE)
+                    out, err = p.communicate()
+                    out = out.replace("\n", "")
+                    due_date_dt = datetime.datetime.strptime(due_date, "%Y-%m-%dT%H:%M:%S")
+                    student_date_dt = datetime.datetime.strptime(out[:19], '%Y-%m-%d %H:%M:%S')
+                    delta = student_date_dt - due_date_dt
+                    if delta.days >= 0:
+                        if delta.seconds > 60:
+                            result['due_date'] = delta.days + 1
+                        else:
+                            result['due_date'] = delta.days
+                    else:
+                        result['due_date'] = 0
+
+                    # calculate final grade
+                    if result['due_date'] > 3:
+                        grade = 0
+                    else:
+                        grade = grade * (1 - 0.1 * result['due_date'])
 
         result['grade'] = grade
         # append to results
         results.append(result)
 
     df = pandas.DataFrame(results, columns=columns)
-    df.to_csv('%s/%s_grade.csv' % (current_dir, project_name), index=False)
+    if len(individual) == 0:
+        df.to_csv('%s/%s_grade.csv' % (current_dir, project_name), index=False)
+    else:
+        print df
 
 
 if __name__ == '__main__':
@@ -242,5 +258,6 @@ if __name__ == '__main__':
     parser.add_argument('--assign-name', help="Prefix string for the assignment.")
     parser.add_argument('--token-file', help="File containing GitHub authorization token/password.")
     parser.add_argument('--roster-file', help="CSV file containing classroom roster")
+    parser.add_argument('--student', help="student id for individual grading")
     args = parser.parse_args()
     main(args)
