@@ -64,7 +64,7 @@ def main(args):
     if args.token_file:
         with open(args.token_file) as file:
             token = file.read().strip()
-    individual = args.student.strip()
+    individual = args.student
 
     # set directory vars
     current_dir = os.getcwd()
@@ -106,7 +106,7 @@ def main(args):
 
     for index, student in students_list.iterrows():
         # if individual grading, skip others
-        if len(individual) == 0 or str(student['id']).strip() != individual:
+        if individual is not None and str(student['id']).strip() != str(individual).strip():
             continue
         result = {'id': student['id']}
         grade = 0
@@ -245,7 +245,7 @@ def main(args):
         results.append(result)
 
     df = pandas.DataFrame(results, columns=columns)
-    if len(individual) == 0:
+    if individual is not None:
         df.to_csv('%s/%s_grade.csv' % (current_dir, project_name), index=False)
     else:
         print df
