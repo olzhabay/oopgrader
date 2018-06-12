@@ -168,6 +168,7 @@ def main(args):
                                                in_filename=test_input,
                                                out_filename=user_output,
                                                timeout_sec=timelimit * 60)
+                        print "test %d" % i
                         # check
                         if stat == 0:
                             diff = compare_output(open(user_output, 'r'), open(test_output, 'r'))
@@ -181,10 +182,14 @@ def main(args):
 
                     # test memory leak
                     if valgrind:
-                        stat = execute_command(["valgrind", "-v", "%s/driver%d" % (student_project_dir, valgrind_test)],
-                                               out_filename="valgrind.txt", timeout_sec=timelimit*60)
+                        stat = execute_command(["valgrind", 
+                                                "--log-file=%s/valgrind.txt" % student_project_dir, 
+                                                "%s/driver%d" % (student_project_dir, valgrind_test)],
+                                               out_filename="%s/valgrind_out.txt" % student_project_dir, 
+                                               timeout_sec=timelimit*60)
+                        print "valgrind"
                         if stat == 0:
-                            if 'no leak' in open('valgrind.txt'):
+                            if 'no leaks' in open('%s/valgrind.txt' % student_project_dir).read():
                                 result['valgrind'] = "success"
                                 grade += test_pts
                             else:
@@ -245,7 +250,7 @@ def main(args):
         results.append(result)
 
     df = pandas.DataFrame(results, columns=columns)
-    if individual is not None:
+    if individual is None:
         df.to_csv('%s/%s_grade.csv' % (current_dir, project_name), index=False)
     else:
         print df
